@@ -168,6 +168,7 @@ class Ant:
     def move(self, trails, visibility):
         if not self.trail:
             self.trail.append(random.choice(list(self.nodes)))
+            self.visited.add(self.trail[0])
         while len(self.trail) < len(self.nodes):
             current_node = self.trail[-1]
             available_nodes = list(self.nodes - self.visited)

@@ -3,6 +3,66 @@ from tkinter import ttk
 import networkx as nx
 import math
 from itertools import permutations
+import random
+
+class AntColony:
+    def __init__(self, graph, ants_count=10, evaporation_rate=0.1, pheromone_deposit=1, alpha=1, beta=2, iterations=100):
+        self.graph = graph
+        self.ants_count = ants_count
+        self.evaporation_rate = evaporation_rate
+        self.pheromone_deposit = pheromone_deposit
+        self.alpha = alpha
+        self.beta = beta
+        self.iterations = iterations
+
+    def find_shortest_path(self):
+        shortest_path = None
+        min_cycle_length = float('inf')
+
+        for _ in range(self.iterations):
+            paths = self.generate_ant_paths()
+            self.update_pheromones(paths)
+            current_shortest_path, current_cycle_length = self.get_shortest_path(paths)
+            if current_cycle_length < min_cycle_length:
+                shortest_path = current_shortest_path
+                min_cycle_length = current_cycle_length
+
+        return shortest_path, min_cycle_length
+
+    def generate_ant_paths(self):
+        paths = []
+        for _ in range(self.ants_count):
+            path = self.generate_ant_path()
+            paths.append(path)
+        return paths
+
+    def generate_ant_path(self):
+        nodes = list(self.graph.nodes)
+        random.shuffle(nodes)
+        return nodes
+
+    def update_pheromones(self, paths):
+        for path in paths:
+            cycle_length = sum(self.graph[path[i]][path[i+1]]['weight'] for i in range(len(path) - 1))
+            cycle_length += self.graph[path[-1]][path[0]]['weight']
+            for i in range(len(path) - 1):
+                self.graph[path[i]][path[i+1]]['pheromone'] += self.pheromone_deposit / cycle_length
+            self.graph[path[-1]][path[0]]['pheromone'] += self.pheromone_deposit / cycle_length
+
+        for edge in self.graph.edges:
+            self.graph.edges[edge]['pheromone'] *= (1 - self.evaporation_rate)
+
+    def get_shortest_path(self, paths):
+        min_cycle_length = float('inf')
+        shortest_path = None
+        for path in paths:
+            cycle_length = sum(self.graph[path[i]][path[i+1]]['weight'] for i in range(len(path) - 1))
+            cycle_length += self.graph[path[-1]][path[0]]['weight']
+            if cycle_length < min_cycle_length:
+                min_cycle_length = cycle_length
+                shortest_path = path
+        return shortest_path, min_cycle_length
+
 
 class GraphApp:
     def __init__(self, root):

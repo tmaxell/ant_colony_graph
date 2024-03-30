@@ -84,11 +84,14 @@ class GraphApp:
         pheromone_constant = 100
         visibility_constant = 100
 
+        alpha = 1
+        beta = 2
+
         def initial_pheromone():
-            return {edge: 1 for edge in self.graph.edges()}
+            return {(edge[0], edge[1]): 1 for edge in self.graph.edges()}
 
         def calculate_visibility():
-            return {edge: 1 / weight for edge, weight in nx.get_edge_attributes(self.graph, 'weight').items()}
+            return {(edge[0], edge[1]): 1 / weight for edge, weight in nx.get_edge_attributes(self.graph, 'weight').items()}
 
         def update_pheromone(trails, ants):
             for edge in trails.keys():
@@ -104,7 +107,7 @@ class GraphApp:
             total_prob = 0
             for node in available_nodes:
                 edge = (current_node, node)
-                probabilities.append((node, (pheromone[edge] ** alpha) * (visibility[edge] ** beta)))
+                probabilities.append((node, (pheromone.get(edge, 1) ** alpha) * (visibility.get(edge, 1) ** beta)))
                 total_prob += probabilities[-1][1]
             probabilities = [(node, prob / total_prob) for node, prob in probabilities]
             selected_node = None

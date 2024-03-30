@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import ttk
 import networkx as nx
 import math
-from itertools import permutations
 import random
 
 class GraphApp:
@@ -79,26 +78,74 @@ class GraphApp:
             print("Недостаточно вершин для построения цикла")
             return
 
-        graph = nx.Graph()
-        for edge in self.edges:
-            graph.add_edge(edge[0], edge[1], weight=edge[2])
+        ant_count = 10
+        generations = 100
+        evaporation_rate = 0.5
+        pheromone_constant = 100
+        visibility_constant = 100
 
-        ant_colony = AntColony(graph)
-        shortest_path, min_cycle_length = ant_colony.find_shortest_path()
+        def initial_pheromone():
+            return {edge: 1 for edge in self.graph.edges()}
 
-        print("Кратчайший гамильтонов цикл:", shortest_path)
-        print("Стоимость всего пути:", min_cycle_length)
+        def calculate_visibility():
+            return {edge: 1 / weight for edge, weight in nx.get_edge_attributes(self.graph, 'weight').items()}
+
+        def update_pheromone(trails, ants):
+            for edge in trails.keys():
+                pheromone = trails[edge]
+                for ant in ants:
+                    if edge in ant.trail:
+                        pheromone += pheromone_constant / ant.trail_length()
+                pheromone *= evaporation_rate
+                trails[edge] = max(pheromone, 0.1)  # Ensure pheromone doesn't become zero
+
+        def select_next_node(current_node, available_nodes, pheromone, visibility):
+            probabilities = []
+            total_prob = 0
+            for node in available_nodes:
+                edge = (current_node, node)
+                probabilities.append((node, (pheromone[edge] ** alpha) * (visibility[edge] ** beta)))
+                total_prob += probabilities[-1][1]
+            probabilities = [(node, prob / total_prob) for node, prob in probabilities]
+            selected_node = None
+            r = random.uniform(0, 1)
+            for node, prob in probabilities:
+                if r <= prob:
+                    selected_node = node
+                    break
+                else:
+                    r -= prob
+            if selected_node is None:
+                selected_node = random.choice(available_nodes)
+            return selected_node
+
+        trails = initial_pheromone()
+        visibility = calculate_visibility()
+        best_path = None
+        best_length = float('inf')
+
+        for _ in range(generations):
+            ants = [Ant(self.graph.nodes(), select_next_node) for _ in range(ant_count)]
+            for ant in ants:
+                ant.move(trails, visibility)
+                if ant.trail_length() < best_length:
+                    best_path = ant.trail
+                    best_length = ant.trail_length()
+            update_pheromone(trails, ants)
+
+        print("Кратчайший гамильтонов цикл:", best_path)
+        print("Стоимость всего пути:", best_length)
 
         self.canvas.delete("cycle")
-        for i in range(len(shortest_path) - 1):
-            x1, y1 = map(int, shortest_path[i].strip("()").split(", "))
-            x2, y2 = map(int, shortest_path[i+1].strip("()").split(", "))
+        for i in range(len(best_path) - 1):
+            x1, y1 = map(int, best_path[i].strip("()").split(", "))
+            x2, y2 = map(int, best_path[i+1].strip("()").split(", "))
             self.canvas.create_line(x1, y1, x2, y2, fill="red", arrow=tk.LAST, tags="cycle")
-        x1, y1 = map(int, shortest_path[-1].strip("()").split(", "))
-        x2, y2 = map(int, shortest_path[0].strip("()").split(", "))
+        x1, y1 = map(int, best_path[-1].strip("()").split(", "))
+        x2, y2 = map(int, best_path[0].strip("()").split(", "))
         self.canvas.create_line(x1, y1, x2, y2, fill="red", arrow=tk.LAST, tags="cycle")
 
-        self.table.insert("", "end", values=("Итоговая стоимость пути:", "", f"{min_cycle_length:.2f}"))
+        self.table.insert("", "end", values=("Итоговая стоимость пути:", "", f"{best_length:.2f}"))
 
     def clear_canvas(self):
         self.graph.clear()
@@ -108,67 +155,35 @@ class GraphApp:
         self.table.delete(*self.table.get_children())
         self.node_count = 1
 
-class AntColony:
-    def __init__(self, graph, ants_count=10, evaporation_rate=0.1, pheromone_deposit=1, alpha=1, beta=2, iterations=100):
-        self.graph = graph
-        self.ants_count = ants_count
-        self.evaporation_rate = evaporation_rate
-        self.pheromone_deposit = pheromone_deposit
-        self.alpha = alpha
-        self.beta = beta
-        self.iterations = iterations
+class Ant:
+    def __init__(self, nodes, select_next_node):
+        self.nodes = nodes
+        self.select_next_node = select_next_node
+        self.trail = []
+        self.visited = set()
 
-    def find_shortest_path(self):
-        shortest_path = None
-        min_cycle_length = float('inf')
+    def move(self, trails, visibility):
+        if not self.trail:
+            self.trail.append(random.choice(list(self.nodes)))
+        while len(self.trail) < len(self.nodes):
+            current_node = self.trail[-1]
+            available_nodes = list(self.nodes - self.visited)
+            next_node = self.select_next_node(current_node, available_nodes, trails, visibility)
+            self.trail.append(next_node)
+            self.visited.add(next_node)
 
-        for _ in range(self.iterations):
-            paths = self.generate_ant_paths()
-            self.update_pheromones(paths)
-            current_shortest_path, current_cycle_length = self.get_shortest_path(paths)
-            if current_cycle_length < min_cycle_length:
-                shortest_path = current_shortest_path
-                min_cycle_length = current_cycle_length
+    def trail_length(self):
+        length = 0
+        for i in range(len(self.trail) - 1):
+            edge = (self.trail[i], self.trail[i+1])
+            length += self.distance(edge[0], edge[1])
+        length += self.distance(self.trail[-1], self.trail[0])
+        return length
 
-        return shortest_path, min_cycle_length
-
-    def generate_ant_paths(self):
-        paths = []
-        for _ in range(self.ants_count):
-            path = self.generate_ant_path()
-            paths.append(path)
-        return paths
-
-    def generate_ant_path(self):
-        nodes = list(self.graph.nodes)
-        random.shuffle(nodes)
-        return nodes
-
-    def update_pheromones(self, paths):
-        for path in paths:
-            cycle_length = sum(self.graph[path[i]][path[i+1]]['weight'] for i in range(len(path) - 1))
-            cycle_length += self.graph[path[-1]][path[0]]['weight']
-            for i in range(len(path) - 1):
-                node1 = str(path[i])
-                node2 = str(path[i+1])
-                self.graph[node1][node2]['pheromone'] = self.graph[node1][node2].get('pheromone', 0) + self.pheromone_deposit / cycle_length
-            node1 = str(path[-1])
-            node2 = str(path[0])
-            self.graph[node1][node2]['pheromone'] = self.graph[node1][node2].get('pheromone', 0) + self.pheromone_deposit / cycle_length
-
-        for edge in self.graph.edges:
-            self.graph.edges[edge]['pheromone'] *= (1 - self.evaporation_rate)
-
-    def get_shortest_path(self, paths):
-        min_cycle_length = float('inf')
-        shortest_path = None
-        for path in paths:
-            cycle_length = sum(self.graph[path[i]][path[i+1]]['weight'] for i in range(len(path) - 1))
-            cycle_length += self.graph[path[-1]][path[0]]['weight']
-            if cycle_length < min_cycle_length:
-                min_cycle_length = cycle_length
-                shortest_path = path
-        return shortest_path, min_cycle_length
+    def distance(self, node1, node2):
+        x1, y1 = map(int, node1.strip("()").split(", "))
+        x2, y2 = map(int, node2.strip("()").split(", "))
+        return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
 
 if __name__ == "__main__":
     root = tk.Tk()

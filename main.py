@@ -138,41 +138,27 @@ class GraphApp:
             print("Недостаточно вершин для построения цикла")
             return
 
-        min_cycle_length = float('inf')
-        min_hamiltonian_cycle = None
+        graph = nx.Graph()
+        for edge in self.edges:
+            graph.add_edge(edge[0], edge[1], weight=edge[2])
 
-        for start_node in self.nodes:
-            current_node = start_node
-            cycle = [current_node]
-            remaining_nodes = set(self.nodes)
-            remaining_nodes.remove(start_node)
+        ant_colony = AntColony(graph)
+        shortest_path, min_cycle_length = ant_colony.find_shortest_path()
 
-            while remaining_nodes:
-                closest_node = min(remaining_nodes, key=lambda node: self.distance(current_node, node))
-                cycle.append(closest_node)
-                remaining_nodes.remove(closest_node)
-                current_node = closest_node
-
-            cycle_length = sum(self.distance(cycle[i], cycle[i+1]) for i in range(len(cycle) - 1))
-            cycle_length += self.distance(cycle[-1], cycle[0])
-
-            if cycle_length < min_cycle_length:
-                min_cycle_length = cycle_length
-                min_hamiltonian_cycle = cycle
-
-        print("Кратчайший гамильтонов цикл:", min_hamiltonian_cycle)
+        print("Кратчайший гамильтонов цикл:", shortest_path)
         print("Стоимость всего пути:", min_cycle_length)
 
         self.canvas.delete("cycle")
-        for i in range(len(min_hamiltonian_cycle) - 1):
-            x1, y1 = map(int, min_hamiltonian_cycle[i].strip("()").split(", "))
-            x2, y2 = map(int, min_hamiltonian_cycle[i+1].strip("()").split(", "))
+        for i in range(len(shortest_path) - 1):
+            x1, y1 = map(int, shortest_path[i].strip("()").split(", "))
+            x2, y2 = map(int, shortest_path[i+1].strip("()").split(", "))
             self.canvas.create_line(x1, y1, x2, y2, fill="red", arrow=tk.LAST, tags="cycle")
-        x1, y1 = map(int, min_hamiltonian_cycle[-1].strip("()").split(", "))
-        x2, y2 = map(int, min_hamiltonian_cycle[0].strip("()").split(", "))
+        x1, y1 = map(int, shortest_path[-1].strip("()").split(", "))
+        x2, y2 = map(int, shortest_path[0].strip("()").split(", "))
         self.canvas.create_line(x1, y1, x2, y2, fill="red", arrow=tk.LAST, tags="cycle")
 
         self.table.insert("", "end", values=("Итоговая стоимость пути:", "", f"{min_cycle_length:.2f}"))
+
 
 
 
